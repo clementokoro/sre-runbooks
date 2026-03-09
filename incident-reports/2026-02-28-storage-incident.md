@@ -1,9 +1,9 @@
 # Post-Mortem: P1 Storage Incident
 **Date:** February 28, 2026  
-**Severity:** P1 — Full platform degradation  
+**Severity:** P1 - Full platform degradation  
 **Duration:** ~4 hours  
 **Author:** Clement Okoro  
-**Status:** Resolved ✅
+**Status:** Resolved
 
 ---
 
@@ -21,9 +21,9 @@ dependency and improving overall cluster stability.
 | Time (UTC) | Event |
 |---|---|
 | ~14:00 | Storage I/O latency begins spiking on worker nodes |
-| ~14:20 | Pods begin failing liveness probes — evictions start |
+| ~14:20 | Pods begin failing liveness probes - evictions start |
 | ~14:35 | CRI-O logs show `iSCSI connection timeout` on every container start |
-| ~14:50 | All 3 nodes report NotReady — cluster effectively down |
+| ~14:50 | All 3 nodes report NotReady - cluster effectively down |
 | ~15:10 | Root cause identified: CRI-O/iSCSI deadlock under concurrent write pressure |
 | ~15:30 | Decision made: migrate to AWS rather than attempt in-place fix |
 | ~18:00 | AWS infrastructure provisioned, cluster rebuilt, all applications healthy |
@@ -35,13 +35,13 @@ dependency and improving overall cluster stability.
 **Immediate cause:** CRI-O's container image layer management sent concurrent
 iSCSI I/O requests that exceeded the per-session queue depth of the VMware vSAN
 virtual iSCSI target. The iSCSI target deadlocked, causing CRI-O to hang waiting
-for I/O completion — making it unable to start new containers and triggering
+for I/O completion - making it unable to start new containers and triggering
 cascading liveness probe failures across all pods simultaneously.
 
 **Contributing factors:**
 1. Lab was running on VMware Workstation shared storage with no I/O queue depth
-   tuning — an unsupported configuration for production-grade container workloads.
-2. No circuit breaker between the storage layer and CRI-O — a single storage
+   tuning - an unsupported configuration for production-grade container workloads.
+2. No circuit breaker between the storage layer and CRI-O - a single storage
    failure propagated to a full cluster failure.
 3. Node-level health check was not monitoring iSCSI session state, so storage
    degradation was not detected before pod evictions began.
@@ -51,7 +51,7 @@ cascading liveness probe failures across all pods simultaneously.
 ## Impact
 
 - **User-facing impact:** 100% of SRE lab services unavailable for ~4 hours
-- **Data impact:** None — PostgreSQL WAL logs intact, zero data loss
+- **Data impact:** None - PostgreSQL WAL logs intact, zero data loss
 - **Alert coverage:** Alertmanager fired correctly within 2 minutes of the first
   pod eviction. PagerDuty call generated. Slack notification sent to #alerts-sre.
 
@@ -66,7 +66,7 @@ to AWS EC2 with EBS-backed storage.
 **Steps taken:**
 1. Provisioned 4 AWS EC2 t3.medium instances in a dedicated VPC
 2. Rebuilt Kubernetes cluster using kubeadm on Amazon Linux
-3. Re-applied all GitOps manifests via ArgoCD — fully declarative rebuild
+3. Re-applied all GitOps manifests via ArgoCD - fully declarative rebuild
 4. All 14 ArgoCD Applications reached Synced + Healthy within 2 hours
 5. Pre-flight health check (`lab-check.sh`) passed 10/10 green checks
 
@@ -76,10 +76,10 @@ to AWS EC2 with EBS-backed storage.
 
 | Action | Status |
 |---|---|
-| Migrate platform from VMware to AWS EC2 | ✅ Complete (Mar 1) |
-| Add EBS storage metrics to node health monitoring | ✅ Complete via CloudWatch |
-| Document AWS architecture decisions | ✅ Complete (Section 0.9 of lab guide) |
-| Implement Velero S3 backups before next drill | ✅ Complete (Section 12) |
+| Migrate platform from VMware to AWS EC2 | Complete (Mar 1) |
+| Add EBS storage metrics to node health monitoring | Complete via CloudWatch |
+| Document AWS architecture decisions | Complete (Section 0.9 of lab guide) |
+| Implement Velero S3 backups before next drill | Complete (Section 12) |
 
 ---
 
@@ -88,8 +88,8 @@ to AWS EC2 with EBS-backed storage.
 **What went well:**
 - Alertmanager detected the failure and fired to PagerDuty/Slack correctly.
 - The fully declarative GitOps architecture meant the platform could be rebuilt
-  from scratch in 2 hours with zero manual configuration — no `kubectl apply`.
-- PostgreSQL data was intact due to WAL durability — no data loss.
+  from scratch in 2 hours with zero manual configuration - no `kubectl apply`.
+- PostgreSQL data was intact due to WAL durability - no data loss.
 
 **What to improve:**
 - Storage layer health should be monitored at node level, not just pod level.
@@ -101,8 +101,3 @@ to AWS EC2 with EBS-backed storage.
 > When the entire infrastructure is declared in Git, "disaster recovery" is just
 > running `argocd app sync root-app`. The platform was fully operational on new
 > infrastructure in under 2 hours.
-```
-
-**Step 3** — Click **"Commit changes"**, set the commit message to:
-```
-docs(incident): add P1 post-mortem — 2026-02-28 iSCSI/CRI-O storage deadlock
