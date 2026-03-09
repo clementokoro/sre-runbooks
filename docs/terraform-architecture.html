@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRE Lab — Terraform Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;700;900&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #030810;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #e2e8f0;
+    padding: 24px;
+    min-height: 100vh;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  .header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 900;
+    color: #60a5fa;
+    letter-spacing: 1px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .header p { color: #475569; font-size: 11px; margin-top: 4px; }
+
+  .section {
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #060f1e;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .node {
+    background: #0f2240;
+    border: 1px solid #1e3a5f;
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 140px;
+    text-align: center;
+  }
+  .node-icon { font-size: 20px; margin-bottom: 4px; }
+  .node-title { color: #e2e8f0; font-weight: 700; font-size: 13px; }
+  .node-sub { color: #94a3b8; font-size: 11px; margin-top: 2px; }
+  .node-badges { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; margin-top: 6px; }
+
+  .badge {
+    background: #1e40af;
+    color: #93c5fd;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .arrow { color: #3b82f6; font-size: 24px; font-weight: bold; }
+  .arrow-down { color: #3b82f6; font-size: 24px; text-align: center; }
+
+  /* Tooltip */
+  .tip {
+    position: relative;
+    border-bottom: 1px dashed #60a5fa;
+    cursor: help;
+    display: inline-block;
+  }
+  .tip:hover .tiptext {
+    visibility: visible;
+    opacity: 1;
+  }
+  .tiptext {
+    visibility: hidden;
+    opacity: 0;
+    background: #1e3a5f;
+    color: #e2e8f0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    border: 1px solid #3b82f6;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+
+  /* ORIGIN */
+  .origin-box {
+    background: #1a0a2e;
+    border: 1px solid #7c3aed;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #c4b5fd;
+    line-height: 1.7;
+  }
+
+  /* MODULE FILES */
+  .file-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
+  .file-name { color: #60a5fa; font-size: 12px; }
+  .file-desc { color: #64748b; font-size: 11px; }
+
+  .module-card {
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+  .module-card-title { font-weight: 700; font-size: 12px; }
+  .module-card-outputs { color: #94a3b8; font-size: 10px; margin-top: 4px; }
+
+  /* DEPENDENCY FLOW */
+  .dep-node {
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    min-width: 130px;
+  }
+  .dep-title { font-weight: 800; font-size: 13px; }
+  .dep-sub { color: #64748b; font-size: 10px; margin-top: 2px; }
+  .dep-out { font-size: 10px; margin-top: 8px; }
+
+  /* AWS INFRA */
+  .vpc-box {
+    border: 1px dashed #1d4ed8;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .vpc-label { color: #60a5fa; font-size: 11px; font-weight: 700; margin-bottom: 10px; }
+
+  .subnet-box { border-radius: 8px; padding: 10px; }
+  .subnet-label { font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+
+  .ec2-node {
+    background: #0f1f38;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-left: 3px solid #3b82f6;
+  }
+  .ec2-name { color: #60a5fa; font-weight: 700; font-size: 13px; }
+  .ec2-meta { color: #64748b; font-size: 11px; margin-top: 2px; }
+
+  /* STATE */
+  .state-card {
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .state-title { font-weight: 800; margin-bottom: 8px; font-size: 13px; }
+  .state-body { font-size: 11px; line-height: 1.8; color: #64748b; }
+
+  /* IMPORT STEPS */
+  .steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .step-card {
+    border: 1px solid #06b6d4;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    min-width: 130px;
+  }
+  .step-num { color: #67e8f9; font-size: 10px; font-weight: 700; margin-top: 4px; }
+  .step-label { color: #94a3b8; font-size: 10px; margin-top: 3px; }
+
+  /* K8S */
+  .k8s-card { border-radius: 10px; padding: 12px; }
+  .k8s-title { font-weight: 700; margin-bottom: 8px; font-size: 13px; }
+  .k8s-body { font-size: 11px; line-height: 1.8; color: #94a3b8; }
+
+  .info-box {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 10px;
+  }
+
+  .plus { color: #10b981; font-size: 24px; font-weight: bold; }
+
+  footer { text-align: center; color: #1e3a5f; font-size: 11px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>SRE Lab — Complete Terraform Architecture</h1>
+    <p>Hover underlined terms for full definitions · gitlab.com/adindu/infra-real · Clement Okoro</p>
+  </div>
+
+  <!-- ORIGIN -->
+  <div class="section" style="border: 1px solid #7c3aed;">
+    <div class="section-title" style="color:#7c3aed;">Origin — Why Terraform Was Added</div>
+    <div class="row">
+      <div class="node">
+        <div class="node-icon">🖥️</div>
+        <div class="node-title">VMware Workstation</div>
+        <div class="node-sub">5 local VMs</div>
+        <div class="node-badges">
+          <span class="badge">mgmt</span>
+          <span class="badge">gitlab</span>
+          <span class="badge">master</span>
+          <span class="badge">worker1</span>
+          <span class="badge">worker2</span>
+        </div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="origin-box">
+        💡 Local resource constraints hit.<br>
+        Migrated to <strong>AWS</strong>.<br>
+        Infrastructure already running —<br>
+        could NOT destroy live cluster.<br>
+        Used <strong>terraform import</strong> on 9 resources.<br>
+        Zero-change plan = fidelity proven. ✅
+      </div>
+      <div class="arrow">→</div>
+      <div class="node" style="background:#0a1a0a; border-color:#10b981;">
+        <div class="node-icon">☁️</div>
+        <div class="node-title">AWS us-east-1</div>
+        <div class="node-sub">Terraform managed</div>
+        <div class="node-badges">
+          <span class="badge" style="background:#065f46; color:#34d399;">9 resources</span>
+          <span class="badge" style="background:#065f46; color:#34d399;">zero-change plan ✅</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REPO STRUCTURE -->
+  <div class="section" style="border: 1px solid #3b82f6;">
+    <div class="section-title" style="color:#3b82f6;">Terraform Repo — ~/repos/infra-real/terraform/</div>
+    <div class="grid2">
+      <div>
+        <div style="color:#64748b; font-size:11px; margin-bottom:8px;">ROOT FILES</div>
+        <div class="file-item"><span>📌</span><div><div class="file-name">versions.tf</div><div class="file-desc">Pins Terraform CLI + AWS provider versions. Prevents silent upgrades.</div></div></div>
+        <div class="file-item"><span>🔒</span><div><div class="file-name">backend.tf</div><div class="file-desc">S3 remote state + DynamoDB locking config.</div></div></div>
+        <div class="file-item"><span>⚙️</span><div><div class="file-name">variables.tf</div><div class="file-desc">Declares all input variables — types, descriptions, defaults.</div></div></div>
+        <div class="file-item"><span>🏗️</span><div><div class="file-name">main.tf</div><div class="file-desc">Root module — calls all 4 child modules, wires outputs to inputs.</div></div></div>
+        <div class="file-item"><span>📤</span><div><div class="file-name">outputs.tf</div><div class="file-desc">Exposes key values (IPs, IDs) after terraform apply.</div></div></div>
+        <div class="file-item"><span>🔐</span><div><div class="file-name">terraform.tfvars</div><div class="file-desc">Actual values — <strong style="color:#f87171;">GITIGNORED ✅</strong> (IPs, AMI IDs, CIDRs)</div></div></div>
+      </div>
+      <div>
+        <div style="color:#64748b; font-size:11px; margin-bottom:8px;">MODULES/ — Each has main.tf · variables.tf · outputs.tf</div>
+        <div class="module-card" style="background:#064e3b; border: 1px solid #10b981;">
+          <div class="module-card-title" style="color:#10b981;">📁 vpc/ — Virtual Private Cloud</div>
+          <div class="module-card-outputs">outputs: <span class="badge" style="background:#052e16; color:#34d399;">vpc_id</span> <span class="badge" style="background:#052e16; color:#34d399;">public_subnet_id</span> <span class="badge" style="background:#052e16; color:#34d399;">private_subnet_id</span> <span class="badge" style="background:#052e16; color:#34d399;">public_subnet_b_id</span></div>
+        </div>
+        <div class="module-card" style="background:#422006; border: 1px solid #f59e0b;">
+          <div class="module-card-title" style="color:#f59e0b;">📁 security_groups/ — Firewall Rules</div>
+          <div class="module-card-outputs">outputs: <span class="badge" style="background:#292524; color:#fcd34d;">k8s_security_group_id</span></div>
+        </div>
+        <div class="module-card" style="background:#1e1b4b; border: 1px solid #8b5cf6;">
+          <div class="module-card-title" style="color:#8b5cf6;">📁 iam/ — Identity and Access Management</div>
+          <div class="module-card-outputs">outputs: <span class="badge" style="background:#1e1b4b; color:#a78bfa;">k8s_worker_instance_profile_name</span> <span class="badge" style="background:#1e1b4b; color:#a78bfa;">k8s_worker_role_arn</span></div>
+        </div>
+        <div class="module-card" style="background:#0c1a2e; border: 1px solid #3b82f6;">
+          <div class="module-card-title" style="color:#3b82f6;">📁 ec2/ — Elastic Compute Cloud (4 instances)</div>
+          <div class="module-card-outputs">consumes ALL outputs above · builds mgmt, master, worker1, worker2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPENDENCY FLOW -->
+  <div class="section" style="border: 1px solid #10b981;">
+    <div class="section-title" style="color:#10b981;">Module Dependency Flow — Terraform Figures Out Order Automatically</div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;">
+
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+        <div class="dep-node" style="background:#064e3b; border:1px solid #10b981;">
+          <div class="dep-title" style="color:#10b981;">1️⃣ VPC Module</div>
+          <div class="dep-sub">no dependencies<br>runs FIRST</div>
+          <div class="dep-out" style="color:#34d399;">outputs:<br>vpc_id · subnet IDs</div>
+        </div>
+        <div class="plus">+</div>
+        <div class="dep-node" style="background:#1e1b4b; border:1px solid #8b5cf6;">
+          <div class="dep-title" style="color:#8b5cf6;">1️⃣ IAM Module</div>
+          <div class="dep-sub">no dependencies<br>runs PARALLEL with VPC</div>
+          <div class="dep-out" style="color:#a78bfa;">outputs:<br>instance_profile_name</div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="dep-node" style="background:#422006; border:1px solid #f59e0b;">
+        <div class="dep-title" style="color:#f59e0b;">2️⃣ Security Groups</div>
+        <div class="dep-sub">needs vpc_id from VPC<br>waits for VPC to finish</div>
+        <div class="dep-out" style="color:#fcd34d;">outputs:<br>k8s_security_group_id</div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="dep-node" style="background:#0c1a2e; border:1px solid #3b82f6;">
+        <div class="dep-title" style="color:#3b82f6;">3️⃣ EC2 Module</div>
+        <div class="dep-sub">needs VPC + SG + IAM<br>waits for ALL THREE</div>
+        <div class="dep-out" style="color:#93c5fd;">builds:<br>mgmt · master<br>worker1 · worker2</div>
+      </div>
+
+    </div>
+    <div class="info-box">
+      ⚡ You NEVER specify the build order manually. Terraform reads the output→input references and resolves the order itself. Modules with no shared dependencies (VPC + IAM) run in parallel automatically.
+    </div>
+  </div>
+
+  <!-- AWS INFRASTRUCTURE -->
+  <div class="section" style="border: 1px solid #f59e0b;">
+    <div class="section-title" style="color:#f59e0b;">AWS Infrastructure — What Terraform Manages (9 Imported Resources)</div>
+
+    <div class="vpc-box">
+      <div class="vpc-label">
+        <span class="tip">VPC<span class="tiptext">Virtual Private Cloud — isolated network in AWS</span></span>: vpc-01c54e789aafdd5a7 — 10.0.0.0/16 — us-east-1
+      </div>
+
+      <div class="grid2">
+        <!-- PUBLIC SUBNET -->
+        <div class="subnet-box" style="border: 1px dashed #10b981;">
+          <div class="subnet-label" style="color:#10b981;">🟢 PUBLIC SUBNET — 10.0.0.0/20 (us-east-1a)</div>
+          <div class="ec2-node" style="border-left-color:#10b981;">
+            <div class="ec2-name">🛠️ mgmt (Management Node)</div>
+            <div class="ec2-meta">t3.small · RHEL 9.7 · Public IP: 52.72.53.211</div>
+            <div class="node-badges" style="justify-content:flex-start; margin-top:6px;">
+              <span class="badge">SSH entry point</span>
+              <span class="badge">kubectl runs here</span>
+              <span class="badge">Terraform runs here</span>
+              <span class="badge">Ansible runs here</span>
+              <span class="badge">NO IAM profile</span>
+              <span class="badge" style="background:#7f1d1d; color:#fca5a5;">prevent_destroy ✅</span>
+            </div>
+          </div>
+          <div class="ec2-node" style="border-left-color:#a855f7;">
+            <div class="ec2-name">🧠 k8s-master (Kubernetes Control Plane)</div>
+            <div class="ec2-meta">t3.large · RHEL 9.7 · Private IP: 10.0.5.229</div>
+            <div class="node-badges" style="justify-content:flex-start; margin-top:6px;">
+              <span class="badge">kubeadm control plane</span>
+              <span class="badge">API server</span>
+              <span class="badge">etcd</span>
+              <span class="badge">scheduler</span>
+              <span class="badge">NO IAM profile</span>
+              <span class="badge" style="background:#7f1d1d; color:#fca5a5;">prevent_destroy ✅</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PRIVATE SUBNET -->
+        <div class="subnet-box" style="border: 1px dashed #f59e0b;">
+          <div class="subnet-label" style="color:#f59e0b;">🟡 PRIVATE SUBNET — 10.0.128.0/20 (us-east-1a) — No Direct Internet</div>
+          <div class="ec2-node" style="border-left-color:#f59e0b;">
+            <div class="ec2-name">⚙️ k8s-worker1</div>
+            <div class="ec2-meta">t3.large · RHEL 9.7 · Runs application pods</div>
+            <div class="node-badges" style="justify-content:flex-start; margin-top:6px;">
+              <span class="badge" style="background:#065f46; color:#34d399;">IAM profile ✅</span>
+              <span class="badge" style="background:#065f46; color:#34d399;">LBC = AWS Load Balancer Controller</span>
+              <span class="badge">Crushes API pods</span>
+              <span class="badge">LGTM pods</span>
+              <span class="badge" style="background:#7f1d1d; color:#fca5a5;">prevent_destroy ✅</span>
+            </div>
+          </div>
+          <div class="ec2-node" style="border-left-color:#f59e0b;">
+            <div class="ec2-name">⚙️ k8s-worker2</div>
+            <div class="ec2-meta">t3.large · RHEL 9.7 · Runs application pods</div>
+            <div class="node-badges" style="justify-content:flex-start; margin-top:6px;">
+              <span class="badge" style="background:#065f46; color:#34d399;">IAM profile ✅</span>
+              <span class="badge" style="background:#065f46; color:#34d399;">LBC = AWS Load Balancer Controller</span>
+              <span class="badge">Crushes API pods</span>
+              <span class="badge">LGTM pods</span>
+              <span class="badge" style="background:#7f1d1d; color:#fca5a5;">prevent_destroy ✅</span>
+            </div>
+          </div>
+          <div class="info-box" style="margin-top:8px;">
+            🔐 <strong style="color:#f59e0b;">Why workers have IAM profile, master does not:</strong><br>
+            The <span class="tip">LBC<span class="tiptext">AWS Load Balancer Controller — runs in Kubernetes, creates ALBs automatically from Ingress objects</span></span> runs on workers. It needs AWS API permissions to create and manage <span class="tip">ALBs<span class="tiptext">Application Load Balancers — AWS managed load balancers that route HTTP/HTTPS traffic</span></span>. Master + mgmt make no AWS API calls. Giving them the profile would violate least privilege.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE MANAGEMENT -->
+  <div class="section" style="border: 1px solid #ec4899;">
+    <div class="section-title" style="color:#ec4899;">State Management — Remote State + Distributed Locking</div>
+    <div class="grid2">
+      <div class="state-card" style="background:#1a0520; border:1px solid #ec4899;">
+        <div class="state-title" style="color:#ec4899;">🪣 S3 — Remote State Storage</div>
+        <div class="state-body">
+          Bucket: sre-lab-terraform-state-207567755537<br>
+          Key: lab/terraform.tfstate<br>
+          Versioned: ✅ &nbsp; Encrypted: ✅<br><br>
+          <span style="color:#f9a8d4;">
+          Terraform's memory of every resource it manages.<br>
+          All teammates share one state file.<br>
+          If your laptop dies, state survives in S3.
+          </span>
+        </div>
+      </div>
+      <div class="state-card" style="background:#0a1a0a; border:1px solid #22c55e;">
+        <div class="state-title" style="color:#22c55e;">🔒 DynamoDB — Distributed Mutex Lock</div>
+        <div class="state-body">
+          Table: sre-lab-terraform-locks<br><br>
+          <span style="color:#86efac;">
+          Empty table = nobody running apply (FREE)<br>
+          One row exists = apply in progress (LOCKED)<br>
+          Row deleted = apply complete (FREE)<br><br>
+          Engineer 2 gets blocked with error<br>
+          showing WHO holds the lock + timestamp.
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORT STORY -->
+  <div class="section" style="border: 1px solid #06b6d4;">
+    <div class="section-title" style="color:#06b6d4;">The Import Story — Live Infrastructure → Terraform Managed (No Downtime)</div>
+    <div class="steps">
+      <div class="step-card" style="background:#0e7490;">
+        <div style="font-size:20px;">☁️</div>
+        <div class="step-num">STEP 1</div>
+        <div class="step-label">Infrastructure already<br>running in AWS.<br>Cannot destroy live cluster.</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step-card" style="background:#0e7490;">
+        <div style="font-size:20px;">📝</div>
+        <div class="step-num">STEP 2</div>
+        <div class="step-label">Wrote HCL modules<br>to describe exactly<br>what already existed.</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step-card" style="background:#0e7490;">
+        <div style="font-size:20px;">📥</div>
+        <div class="step-num">STEP 3</div>
+        <div class="step-label">terraform import<br>× 9 resources<br>(VPC, SGs, EC2s)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step-card" style="background:#065f46;">
+        <div style="font-size:20px;">🔍</div>
+        <div class="step-num">STEP 4</div>
+        <div class="step-label">terraform plan<br>"No changes."<br>Code = Reality.</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step-card" style="background:#065f46;">
+        <div style="font-size:20px;">🏆</div>
+        <div class="step-num">STEP 5</div>
+        <div class="step-label">Fidelity proven.<br>Zero-change plan<br>is the proof. ✅</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT RUNS INSIDE K8S -->
+  <div class="section" style="border: 1px solid #a855f7;">
+    <div class="section-title" style="color:#a855f7;">What Runs Inside Kubernetes — Managed by ArgoCD (~/repos/infra GitOps repo)</div>
+    <div class="grid2">
+      <div class="k8s-card" style="background:#1a0a2e; border:1px solid #a855f7;">
+        <div class="k8s-title" style="color:#a855f7;">📊 LGTM Observability Stack</div>
+        <div class="k8s-body">
+          <strong style="color:#c4b5fd;">L</strong>oki — log aggregation<br>
+          <strong style="color:#c4b5fd;">G</strong>rafana — dashboards + SLO visualization<br>
+          <strong style="color:#c4b5fd;">T</strong>empo — distributed tracing<br>
+          <strong style="color:#c4b5fd;">M</strong>etrics — Prometheus + Alertmanager<br><br>
+          Alerts → PagerDuty · Slack · Jira · Email<br>
+          SLO burn-rate alerting configured
+        </div>
+      </div>
+      <div class="k8s-card" style="background:#0a1525; border:1px solid #3b82f6;">
+        <div class="k8s-title" style="color:#3b82f6;">🖼️ Crushes API — Go REST API (590 lines)</div>
+        <div class="k8s-body">
+          4 environments: dev · qa · staging · production<br>
+          ArgoCD App-of-Apps pattern<br>
+          14 ArgoCD Applications<br>
+          GitLab CI/CD — SLSA Level 2<br>
+          Trivy CVE scanning<br>
+          k6 load testing<br>
+          2 formal postmortems on GitHub
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THREE TOOLS THREE LAYERS -->
+  <div class="section" style="border: 1px solid #64748b;">
+    <div class="section-title" style="color:#64748b;">Three Tools — Three Layers — Zero Overlap</div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; align-items:center;">
+      <div class="node" style="background:#0a1a0a; border-color:#10b981; min-width:200px;">
+        <div class="node-icon">🏗️</div>
+        <div class="node-title" style="color:#10b981;">Terraform</div>
+        <div class="node-sub">AWS Layer</div>
+        <div class="node-sub" style="margin-top:6px;">VPC · EC2 · SG · IAM · S3<br>~/repos/infra-real</div>
+      </div>
+      <div class="arrow">+</div>
+      <div class="node" style="background:#0a1525; border-color:#3b82f6; min-width:200px;">
+        <div class="node-icon">📋</div>
+        <div class="node-title" style="color:#3b82f6;">Ansible</div>
+        <div class="node-sub">OS Configuration Layer</div>
+        <div class="node-sub" style="margin-top:6px;">kernel · sysctl · swap<br>ulimits · chronyd<br>github.com/clementokoro/sre-lab-ansible</div>
+      </div>
+      <div class="arrow">+</div>
+      <div class="node" style="background:#1a0a2e; border-color:#a855f7; min-width:200px;">
+        <div class="node-icon">🔄</div>
+        <div class="node-title" style="color:#a855f7;">ArgoCD</div>
+        <div class="node-sub">Kubernetes Layer</div>
+        <div class="node-sub" style="margin-top:6px;">deployments · services<br>ingress · PVCs<br>~/repos/infra (GitOps)</div>
+      </div>
+    </div>
+    <div class="info-box" style="text-align:center; margin-top:12px;">
+      🎯 Terraform builds the servers. Ansible configures the OS on those servers. ArgoCD manages what runs inside Kubernetes on those servers.
+    </div>
+  </div>
+
+  <footer>
+    Hover any underlined term for full definition · Built March 8-9, 2026 · github.com/clementokoro · Validity Interview Prep
+  </footer>
+
+</div>
+</body>
+</html>
